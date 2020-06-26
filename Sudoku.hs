@@ -15,16 +15,16 @@ import Data.STRef
 type Value = Int
 type Cell = (Int, Int)
 type Options s = STArray s Cell (Either Value [Value])
-type Solution s = STArray s Cell Value
+type Solution = Array Cell Value
 
 main :: IO ()
 main = do str <- getArgs >>= readFile . head
           putStrLn "Solution:"
-          printSolution (runSTArray (createSol str))
+          printSolution (runST (createSol str))
 
-createSol :: String -> ST s (Solution s)
+createSol :: String -> ST s Solution
 createSol str = do sud <- newArray ((0,0),(8,8)) (Right [1..9]) >>= initBoard str
-                   ref <- newArray ((0,0),(8,8)) 0 >>= newSTRef
+                   ref <- newSTRef (array ((0,0),(8,8)) [((i,j) ,0) | i <- [0..8], j <- [0..8]])
                    solve sud ref
                    readSTRef ref
 
@@ -69,10 +69,14 @@ nextInput = fmap (findMin . rights . map sequence) . getAssocs
 -- - Try to find the next easiest position to try
 -- - Try all options at that position, making copies of sudfor recursive calls
 -- - If there aren't any positions left, write the current sud in ref and exit
-solve :: Options s -> STRef s (Solution s) -> ST s ()
+solve :: Options s -> STRef s Solution -> ST s ()
 solve sud ref = nextInput sud >>= either solved continue
-               where solved b = when b (mapArray (fromLeft 0) sud >>= writeSTRef ref)
-                     continue (cell, vs) = forM_ vs (\v -> copySudoku sud >>= \sud' -> putValue sud' cell v >> solve sud' ref)
+               where solved b = when b (do reduce <- mapArray (fromLeft 0) sud
+                                           convert <- freeze reduce
+                                           writeSTRef ref convert)
+                     continue (cell, vs) = forM_ vs (\v -> do sud' <- copySudoku sud
+                                                              putValue sud' cell v
+                                                              solve sud' ref)
 
 copySudoku :: Options s -> ST s (Options s)
 copySudoku a = do a' <- newArray ((0,0),(8,8)) (Right [1..9])
