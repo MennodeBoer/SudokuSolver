@@ -24,9 +24,9 @@ main = do str <- getArgs >>= readFile . head
 
 createSol :: String -> ST s (Solution s)
 createSol str = do sud <- newArray ((0,0),(8,8)) (Right [1..9]) >>= initBoard str
-                   ref <- newArray ((0,0),(8,8)) 0
+                   ref <- newArray ((0,0),(8,8)) 0 >>= newSTRef
                    solve sud ref
-                   return ref
+                   readSTRef ref
 
 
 initBoard :: String -> Options s -> ST s (Options s)
@@ -67,11 +67,11 @@ nextInput = fmap (findMin . rights . map sequence) . getAssocs
 -- Can this be improved?
 -- At the moment:
 -- - Try to find the next easiest position to try
--- - Try all options, making copies of sud' for recursive calls
--- - If there aren't any positions left, copy the current arry in ref and exit
-solve :: Options s -> Solution s -> ST s ()
+-- - Try all options at that position, making copies of sudfor recursive calls
+-- - If there aren't any positions left, write the current sud in ref and exit
+solve :: Options s -> STRef s (Solution s) -> ST s ()
 solve sud ref = nextInput sud >>= either solved continue
-               where solved b = when b (forM_ [0..80] (\n -> readArray sud (n`div`9,n`mod`9) >>= writeArray ref (n`div`9,n`mod`9) . fromLeft 0))
+               where solved b = when b (mapArray (fromLeft 0) sud >>= writeSTRef ref)
                      continue (cell, vs) = forM_ vs (\v -> copySudoku sud >>= \sud' -> putValue sud' cell v >> solve sud' ref)
 
 copySudoku :: Options s -> ST s (Options s)
