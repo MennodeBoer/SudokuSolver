@@ -23,8 +23,7 @@ main = do str <- getArgs >>= readFile . head
           printSolution (runSTArray (createSol str))
 
 createSol :: String -> ST s (Solution s)
-createSol str = do sud <- newArray ((0,0),(8,8)) (Right [1..9])
-                   initBoard str sud
+createSol str = do sud <- newArray ((0,0),(8,8)) (Right [1..9]) >>= initBoard str
                    ref <- newArray ((0,0),(8,8)) 0 >>= newSTRef
                    solve sud ref
                    readSTRef ref
