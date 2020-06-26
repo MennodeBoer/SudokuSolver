@@ -24,9 +24,9 @@ main = do str <- getArgs >>= readFile . head
 
 createSol :: String -> ST s (Solution s)
 createSol str = do sud <- newArray ((0,0),(8,8)) (Right [1..9]) >>= initBoard str
-                   ref <- newArray ((0,0),(8,8)) 0 >>= newSTRef
+                   ref <- newArray ((0,0),(8,8)) 0
                    solve sud ref
-                   readSTRef ref
+                   return ref
 
 
 initBoard :: String -> Options s -> ST s (Options s)
@@ -43,12 +43,12 @@ printSolution a =
                      mapM_ (\x -> putStr (printLine x 0 2) >> putStr "|" >> putStr (printLine x 3 5) >> putStr "|" >> putStrLn (printLine x 6 8))  [6..8]
 
 putValue :: Options s -> Cell -> Value -> ST s ()
-putValue sud (i,j) val = when (val >0) $ do writeArray sud (i,j) (Left val)
-                                            forM_ [0..8] (\y -> updateCell sud (i,y) val)
-                                            forM_ [0..8] (\x -> updateCell sud (x,j) val)
-                                            let i' = 3 * (i `quot` 3)
-                                            let j' = 3 * (j `quot` 3)
-                                            forM_ [0..8] (\x -> updateCell sud (i'+x`div`3 ,j'+x`mod`3) val)
+putValue sud (i,j) val = when (val > 0) $ (do writeArray sud (i,j) (Left val)
+                                              forM_ [0..8] (\y -> updateCell sud (i,y) val)
+                                              forM_ [0..8] (\x -> updateCell sud (x,j) val)
+                                              let i' = 3 * (i `quot` 3)
+                                              let j' = 3 * (j `quot` 3)
+                                              forM_ [0..8] (\x -> updateCell sud (i'+x`div`3 ,j'+x`mod`3) val))
 
 updateCell :: Options s -> Cell -> Value -> ST s ()
 updateCell sud cell val = readArray sud cell >>= either filled delOpt
@@ -64,9 +64,14 @@ findMin ((c',vs'):(c,vs):xs) = if length vs' > length vs then findMin ((c,vs):xs
 nextInput :: Options s -> ST s (Either Bool (Cell, [Value]))
 nextInput = fmap (findMin . rights . map sequence) . getAssocs
 
-solve :: Options s -> STRef s (Solution s) -> ST s ()
+-- Can this be improved?
+-- At the moment:
+-- - Try to find the next easiest position to try
+-- - Try all options, making copies of sud' for recursive calls
+-- - If there aren't any positions left, copy the current arry in ref and exit
+solve :: Options s -> Solution s -> ST s ()
 solve sud ref = nextInput sud >>= either solved continue
-               where solved b = when b (mapArray (either id (const 0)) sud >>= writeSTRef ref)
+               where solved b = when b (forM_ [0..80] (\n -> readArray sud (n`div`9,n`mod`9) >>= writeArray ref (n`div`9,n`mod`9) . fromLeft 0))
                      continue (cell, vs) = forM_ vs (\v -> copySudoku sud >>= \sud' -> putValue sud' cell v >> solve sud' ref)
 
 copySudoku :: Options s -> ST s (Options s)
